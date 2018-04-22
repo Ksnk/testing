@@ -45,8 +45,8 @@ class doitall
 
             $apis = DB::select('select * from api');
             $results = [];
-            //return $apis ;
-            //$results['apis']=$apis;
+            // return $apis ;
+            // $results['apis']=$apis;
             foreach ($apis as $api) {
                 $endpoints = explode(',', $api->endpoints);
                 $eps = array_chunk($endpoints, $api->maxconn);
