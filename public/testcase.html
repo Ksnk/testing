@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<!-- тестовая оболочка для проверки и нагрузки АПИ -->
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Testcase</title>
+    <link href="//code.ionicframework.com/ionicons/2.0.1/css/ionicons.min.css" type="text/css" rel="stylesheet">
+    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.2.1/jquery.js"></script>
+
+    <style>
+        /** таблицы */
+        .table-row {
+            display: table-row;
+        }
+        .table-row>span {
+            display: table-cell;
+        }
+        .table {
+            display: table;
+        }
+        /** бордеры  */
+        .table-row>span {
+            padding:5px 10px;
+        }
+        .table-row.head>span {
+            padding:5px 10px;
+            text-align: center;
+            font-weight: bold;
+        }
+        /** ионические кнопочки */
+        .ion {
+            padding-right:5px;
+        }
+
+        .runonce:before {
+            content: "\f215"; /* play */
+        }
+        .runstop:before {
+            content: "\f201"; /* loop */
+        }
+        .running .runstop:before {
+            content: "\f210"; /* pause */
+        }
+    </style>
+</head>
+<body>
+
+<h2>Настройка тестового АПИ</h2>
+<div class="table">
+    <div class="table-row head">
+        <span>АПИ</span>
+        <span>задержка</span>
+        <span>интервал запуска</span>
+        <span></span>
+    </div>
+
+    <div class="table-row form" data-data='{"api":"one"}'>
+        <span> 1</span>
+        <span><input name="delay"></span>
+        <span><input name="period"></span>
+        <span><span class="ion runonce" data-handle="runonce"></span><span class="ion runstop" data-handle="runstop"></span>
+        </span>
+    </div>
+
+    <div class="table-row form" data-data='{"api":"two"}'>
+        <span> 2</span>
+        <span><input name="delay"></span>
+        <span><input name="period"></span>
+        <span><span class="ion runonce" data-handle="runonce"></span><span class="ion runstop" data-handle="runstop"></span>
+        </span>
+    </div>
+</div>
+
+
+</body>
+<script>
+    function apicall(data){
+        console.log(data);
+        return true;
+    }
+
+    function handle(reason){
+        var parent, data;
+        switch(reason){
+            case 'updatedata':
+                parent=$(this).parents('.form').eq(0);
+                data=$(parent).data('data');
+                var fields = $( ":input", parent ).serializeArray();
+                $.each( fields, function( i, field ) {
+                    data[field.name]=field.value;
+                });
+                $(parent).data('data', data);
+                break;
+            case 'stop':
+                parent=$(this).parents('.form').eq(0);
+                parent.removeClass('running');
+                var to=parent.data('timeout');
+                if(to) clearInterval(to);
+                parent.data('timeout',false);
+                break;
+            case 'run':
+                parent=$(this).parents('.form').eq(0);
+                data=$(parent).data('data');
+                apicall(data);
+                break;
+            case 'runonce':
+                handle.call(this,'stop');
+                handle.call(this,'updatedata');
+                handle.call(this,'run');
+                break;
+            case 'runstop':
+                parent=$(this).parents('.form').eq(0);
+                if(parent.is('.running')){
+                    handle.call(this,'stop');
+                } else {
+                    handle.call(this,'updatedata');
+                    parent.addClass('running');
+                    var that=this;
+                    parent.data('timeout',setInterval(function(){handle.call(that,'run')},1000));
+                }
+                break;
+            default:
+                console.log(reason);
+        }
+    }
+
+    $(document).on('click','[data-handle]',function(){
+        if($(this).is('span')){
+            return handle.call(this,$(this).data('handle'));
+        }
+    });
+    
+</script>
+</html>
