@@ -8,6 +8,9 @@ use Illuminate\Console\Application;
 
 class Cron extends Command
 {
+
+    public $bar =null;
+
     /**
      * The name and signature of the console command.
      *
@@ -25,15 +28,30 @@ class Cron extends Command
     /**
      * Execute the console command.
      *
-     * @return mixed
      */
     public function handle()
     {
         $doitall= new doitall;
-        $this->info(
-            print_r(
-                $doitall->db_read($this->argument('api')), /*'Hello world!' */
-                true)
+        $that=$this;
+        $doitall->db_read(
+            $this->argument('api'),
+            function($reason, $data=null) use($that){
+                switch ($reason){
+                    case 'total':
+                        // initprogressbar
+                        $that->bar= $that->output->createProgressBar($data);
+                        break;
+                    case '+1':
+                        // move
+                        if($that->bar)
+                            $that->bar->advance();
+                        break;
+                    default:
+                        $that->info($reason. ' '. print_r($data, true));
+                        break;
+                }
+            }
         );
+        if($this->bar) $this->bar->finish();
     }
 }

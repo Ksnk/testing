@@ -16,76 +16,123 @@ use Illuminate\Support\Facades\DB;
 class doitall
 {
 
-    function curl($data, $xx)
-    {
-        $url = $data->url;//"http://mydomain.ru/api/metod/1/table";
-        $ch = curl_init();
-        //$xx = explode(',', $data->endpoints);
-        if (empty($xx)) return false;
-        $xx = 'data[]=' . implode('&data[]=', $xx);
-        //curl_setopt($ch, CURLOPT_HTTPHEADER, array('Content-Type: application/json'));
-        if ($data->type & 1) { // so do a GET
-            curl_setopt($ch, CURLOPT_URL, $url . '?' . $xx);
-        } else { // so POST allowed
-            curl_setopt($ch, CURLOPT_URL, $url);
-            curl_setopt($ch, CURLOPT_POST, true);
-            curl_setopt($ch, CURLOPT_POSTFIELDS, $xx);
-        }
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
-        $result = curl_exec($ch);
-        $info = curl_getinfo($ch);
-        curl_close($ch);
-        return ['url' =>$url, 'info' => $info['http_code'], 'result' => $result];// $result;
-    }
-
-    function db_read($api=null)
-    {
-
+    /**
+     * Подготовка и выдача даных для курла
+     * @param $api
+     * @return array
+     */
+    private function prepare_data($api){
         if(empty($api)) {
             $apis = DB::select('select * from api');
         } else {
             $apis = DB::select('select * from api where id=?',[$api]);
         }
-        $results = [];
-        // return $apis ;
-        // $results['apis']=$apis;
-        if(!empty($apis))
-        foreach ($apis as $api) {
-            // Это , типа, lock
-            if (DB::update('update api set apilock=now() where id=? and (apilock is null or DATE_ADD(`apilock`, INTERVAL 15 MINUTE)<now())', [$api->id])) {
-                try {
-                    $endpoints = explode(',', $api->endpoints);
-                    $eps = array_chunk($endpoints, $api->maxconn);
-                    if (empty($eps)) continue;
-                    foreach ($eps as $ep) {
-                        $result = $this->curl($api, $ep);
-                        $results[] = $result;
-                        $result = json_decode($result['result'], true);
-                        if (!empty($result)) {
-                            foreach ($result as $key => $val) {
-                                // $db_table->beginTransaction();
-                                $data = [
-                                    'endpoint_id' => $key,
-                                    'type' => $api->id,
-                                ];
-                                $_ep = DB::selectOne('select * from services where `type`=:type and `endpoint_id`=:endpoint_id', $data);
-                                $data['value'] = $val['value'];
+        $curldata = [];
+        if(empty($apis)) return $curldata;
 
-                                if (!$_ep) {
-                                    DB::insert('insert into services set value=:value,type=:type, endpoint_id=:endpoint_id,  created_at=now(), updated_at=now()', $data);
-                                } else {
-                                    DB::update('update services set value=:value,  updated_at=now() where type=:type and endpoint_id=:endpoint_id', $data);
-                                }
-                                // $db_table->commit();
-                            }
-                        }
-                    }
-                } catch (Exception $e) {
+        // считаем данные и сочиняем задания для curl_multi_init все зараз
+        foreach ($apis as $api) {
+            $endpoints = explode(',', $api->endpoints);
+            $eps = array_chunk($endpoints, $api->maxconn);
+
+            foreach($eps as $_eps) {
+                $data=http_build_query(['data'=>$_eps]);
+                if ($api->type & 1) { // so it's GET'
+                    $curldata[] =
+                        [
+                            'api' => $api->id,
+                            'url' => $api->url . '?' . $data,
+                            'type' => 'GET',
+                            'respond' => '',
+                            'code' => 0,
+                        ];
+                } else {
+                    $curldata[] =
+                        [
+                            'api' => $api->id,
+                            'url' => $api->url,
+                            'type' => 'POST',
+                            'data' => $data,
+                            'respond' => '',
+                            'code' => 0,
+                        ];
                 }
-                DB::update('update api set apilock=NULL where id=?', [$api->id]);
-            };
+            }
         }
-        return $results;
+        return  $curldata;
+    }
+
+    /**
+     * Единичный запуск курла для одной строчки записи.
+     * @todo: Переделать на multy
+     * @param $data
+     * @param $xx
+     */
+    private function curl(&$data)
+    {
+        $url = $data['url'];//"http://mydomain.ru/api/metod/1/table";
+        $ch = curl_init();
+        try {
+            curl_setopt($ch, CURLOPT_URL, $url );
+            if ($data['type']=='POST') { // so do a GET
+                curl_setopt($ch, CURLOPT_POST, true);
+                curl_setopt($ch, CURLOPT_POSTFIELDS, $data['data']);
+            }
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
+            $result = curl_exec($ch);
+            $info = curl_getinfo($ch);
+            $data['code']=$info['http_code'];
+            $data['respond']=json_decode($result, true);
+        } catch( \Exception $e){
+            if(isset($info['http_code']))
+                $data['code']=$info['http_code'];
+            else
+                $data['code']=-1;
+            $data['respond']=[];
+        }
+        curl_close($ch);
+    }
+
+    function db_read( $api=null, callable $callback=null)
+    {
+
+        $curldata= $this->prepare_data($api);
+
+       // $callback('debug',$curldata);
+
+        // устанавливаем верхнюю планку прогрессбара
+        $callback('total',count($curldata));
+
+        foreach($curldata as &$data){
+            $this->curl($data);
+            //$callback('debug',$data);
+            // сдвигаем прогрессбар
+            $callback('+1');
+        }
+        unset($data);// just a dirty magikkk, don't mention it...
+
+        // вписываем полученные данные в базу
+        foreach($curldata as $data){
+            if($data['code']!='200') continue;
+            if(!is_array($data['respond'])) continue;
+            // todo: какая то реакция на грязь в выводе нужна
+            foreach($data['respond'] as $key=>$val){
+                // $db_table->beginTransaction();
+                $_data = [
+                    'endpoint_id' => $key,
+                    'type' => $data['api'],
+                ];
+                $_ep = DB::selectOne('select * from services where `type`=:type and `endpoint_id`=:endpoint_id', $_data);
+                $_data['value'] = $val['value'];
+
+                if (!$_ep) {
+                    DB::insert('insert into services set value=:value,type=:type, endpoint_id=:endpoint_id,  created_at=now(), updated_at=now()', $_data);
+                } else {
+                    DB::update('update services set value=:value,  updated_at=now() where type=:type and endpoint_id=:endpoint_id', $_data);
+                }
+                // $db_table->commit();
+            }
+        }
     }
 
 }
