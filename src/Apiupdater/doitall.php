@@ -72,9 +72,10 @@ class doitall
     {
         $url = $data['url'];//"http://mydomain.ru/api/metod/1/table";
         $ch = curl_init();
+        $info=[];
         try {
             curl_setopt($ch, CURLOPT_URL, $url );
-            if ($data['type']=='POST') { // so do a GET
+            if ($data['type']=='POST') { // so do POST
                 curl_setopt($ch, CURLOPT_POST, true);
                 curl_setopt($ch, CURLOPT_POSTFIELDS, $data['data']);
             }
@@ -88,12 +89,17 @@ class doitall
                 $data['code']=$info['http_code'];
             else
                 $data['code']=-1;
-            $data['respond']=[];
+            $data['message']=$e->getMessage();
         }
         curl_close($ch);
     }
 
-    function db_read( $api=null, callable $callback=null)
+    /**
+     * наружный хандл, дергаем тута...
+     * @param null $api - номер api или пусто
+     * @param callable|null $callback - выдача наружу результата
+     */
+    public function db_read( $api=null, callable $callback=null)
     {
 
         $curldata= $this->prepare_data($api);
@@ -113,11 +119,12 @@ class doitall
 
         // вписываем полученные данные в базу
         foreach($curldata as $data){
-            if($data['code']!='200') continue;
-            if(!is_array($data['respond'])) continue;
-            // todo: какая то реакция на грязь в выводе нужна
+            if($data['code']!='200' || !is_array($data['respond'])) {
+                // todo: какая то реакция на грязь в выводе нужна
+                $callback('result not a 200',$data);
+                continue;
+            }
             foreach($data['respond'] as $key=>$val){
-                // $db_table->beginTransaction();
                 $_data = [
                     'endpoint_id' => $key,
                     'type' => $data['api'],
@@ -130,7 +137,6 @@ class doitall
                 } else {
                     DB::update('update services set value=:value,  updated_at=now() where type=:type and endpoint_id=:endpoint_id', $_data);
                 }
-                // $db_table->commit();
             }
         }
     }
