@@ -60,6 +60,21 @@ class doitall
     }
 
     /**
+     * @param $curldata
+     * @param $callback
+     * @todo: Переделать на multy
+     */
+    private function multycurl (&$curldata,$callback){
+        foreach($curldata as &$data){
+            $this->curl($data);
+            //$callback('debug',$data);
+            // сдвигаем прогрессбар
+            $callback('+1');
+        }
+        unset($data);// just a dirty magikkk, don't mention it...
+    }
+
+    /**
      * Единичный запуск курла для одной строчки записи.
      * @todo: Переделать на multy
      * @param $data
@@ -67,7 +82,7 @@ class doitall
      */
     private function curl(&$data)
     {
-        $url = $data['url'];//"http://mydomain.ru/api/metod/1/table";
+        $url = $data['url'];
         $ch = curl_init();
         $info=[];
         try {
@@ -106,19 +121,13 @@ class doitall
         // устанавливаем верхнюю планку прогрессбара
         $callback('total',count($curldata));
 
-        foreach($curldata as &$data){
-            $this->curl($data);
-            //$callback('debug',$data);
-            // сдвигаем прогрессбар
-            $callback('+1');
-        }
-        unset($data);// just a dirty magikkk, don't mention it...
+        $this->multycurl($curldata,$callback);
 
         // вписываем полученные данные в базу
         foreach($curldata as $data){
             if($data['code']!='200' || !is_array($data['respond'])) {
                 // todo: какая то реакция на грязь в выводе нужна
-                $callback('result not a 200',$data);
+                $callback('bad respond',$data);
                 continue;
             }
             foreach($data['respond'] as $key=>$val){
