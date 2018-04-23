@@ -10,9 +10,6 @@ namespace Ksnk\testing\Apiupdater;
 
 use Illuminate\Support\Facades\DB;
 
-//use Illuminate\Database\Capsule\Manager as DB;
-//use \Illuminate\Foundation\Application as App;
-
 class doitall
 {
 

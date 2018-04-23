@@ -47,7 +47,14 @@ class Cron extends Command
                             $that->bar->advance();
                         break;
                     default:
-                        $that->info($reason. ' '. print_r($data, true));
+                        $info=[];
+                        $args=func_get_args();
+                        if(!empty($args))
+                        foreach($args as $a) {
+                            if (is_string($a)) $info[] = $a;
+                            else if (is_array($a)) $info[] = print_r($data, true);
+                        }
+                        $that->info(implode(' ',$info));
                         break;
                 }
             }
