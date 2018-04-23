@@ -1,29 +1,36 @@
 # Обновление статуса АПИ #
 
-Тестовое задание на понимает и умение работать с laravel и так...
+Тестовое задание на понимание  и умение работать с laravel и так...
 
-### What is this repository for? ###
+## Установка
 
-* Quick summary
-* Version
-* [Learn Markdown](https://bitbucket.org/tutorials/markdowndemo)
+Клонировать репозиторий-
+```
+git clone git@bitbucket.org:ksnk/testing.git
+```
 
-### How do I get set up? ###
+```
+cd testing
+```
 
-* Summary of set up
-* Configuration
-* Dependencies
-* Database configuration
-* How to run tests
-* Deployment instructions
+```
+composer install
+```
 
-### Contribution guidelines ###
+Изменить настройки в .env, чтобы они указывали на базу данных(`DB_USERNAME`, `DB_PASSWORD`).
 
-* Writing tests
-* Code review
-* Other guidelines
+Then create a database named `todos` and then do a database migration using this command-
+```
+php artisan migrate
+```
 
-### Who do I talk to? ###
+Then change permission of storage folder using thins command-
+```
+(sudo) chmod 777 -R storage
+```
 
-* Repo owner or admin
-* Other community or team contact
+At last generate application key, which will be used for password hashing, session and cookie encryption etc.
+```
+php artisan key:generate
+```
+
