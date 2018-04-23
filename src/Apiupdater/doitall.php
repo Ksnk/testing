@@ -35,16 +35,21 @@ class doitall
         $result = curl_exec($ch);
         $info = curl_getinfo($ch);
         curl_close($ch);
-        return ['info' => $info['http_code'], 'result' => $result];// $result;
+        return ['url' =>$url, 'info' => $info['http_code'], 'result' => $result];// $result;
     }
 
-    function db_read()
+    function db_read($api=null)
     {
 
-        $apis = DB::select('select * from api');
+        if(empty($api)) {
+            $apis = DB::select('select * from api');
+        } else {
+            $apis = DB::select('select * from api where id=?',[$api]);
+        }
         $results = [];
         // return $apis ;
         // $results['apis']=$apis;
+        if(!empty($apis))
         foreach ($apis as $api) {
             // Это , типа, lock
             if (DB::update('update api set apilock=now() where id=? and (apilock is null or DATE_ADD(`apilock`, INTERVAL 15 MINUTE)<now())', [$api->id])) {

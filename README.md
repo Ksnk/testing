@@ -58,7 +58,10 @@ php artisan key:generate
 ```
 php artisan sheduler:run
 ```
-Сейчас стоит запуск раз в 5 минут
+Сейчас стоит запуск 
+```
+$schedule->command('doitall')->everyTenMinutes();
+```
 
 Возможен запуск на обновление всех api командой
 ```

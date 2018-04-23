@@ -13,7 +13,7 @@ class Cron extends Command
      *
      * @var string
      */
-    protected $signature = 'doitall';
+    protected $signature = 'doitall {api?}';
 
     /**
      * The console command description.
@@ -32,7 +32,7 @@ class Cron extends Command
         $doitall= new doitall;
         $this->info(
             print_r(
-                $doitall->db_read(), /*'Hello world!' */
+                $doitall->db_read($this->argument('api')), /*'Hello world!' */
                 true)
         );
     }
