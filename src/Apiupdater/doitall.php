@@ -62,48 +62,65 @@ class doitall
     /**
      * @param $curldata
      * @param $callback
-     * @todo: Переделать на multy
+     * @todo: Подумать о переделке на динамическe. подставe обработанных реквестов... наверное проще побелить...
      */
     private function multycurl (&$curldata,$callback){
-        foreach($curldata as &$data){
-            $this->curl($data);
-            //$callback('debug',$data);
-            // сдвигаем прогрессбар
-            $callback('+1');
-        }
-        unset($data);// just a dirty magikkk, don't mention it...
-    }
+        do { // эта музыка будет вечна...
 
-    /**
-     * Единичный запуск курла для одной строчки записи.
-     * @todo: Переделать на multy
-     * @param $data
-     * @param $xx
-     */
-    private function curl(&$data)
-    {
-        $url = $data['url'];
-        $ch = curl_init();
-        $info=[];
-        try {
-            curl_setopt($ch, CURLOPT_URL, $url );
-            if ($data['type']=='POST') { // so do POST
-                curl_setopt($ch, CURLOPT_POST, true);
-                curl_setopt($ch, CURLOPT_POSTFIELDS, $data['data']);
+            $multi = curl_multi_init();
+            $channels = [];
+            $busy = [];
+
+            foreach ($curldata as $key => $data) {
+                if (isset($busy[$data['type']]) || $data['code'] != 0) continue;
+                $ch = curl_init();
+                curl_setopt($ch, CURLOPT_URL, $data['url']);
+                if ($data['type'] == 'POST') { // so do POST
+                    curl_setopt($ch, CURLOPT_POST, true);
+                    curl_setopt($ch, CURLOPT_POSTFIELDS, $data['data']);
+                }
+                curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
+
+                curl_multi_add_handle($multi, $ch);
+                $channels[$key] = $ch;
+                $busy[$data['type']] = true;
             }
-            curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
-            $result = curl_exec($ch);
-            $info = curl_getinfo($ch);
-            $data['code']=$info['http_code'];
-            $data['respond']=json_decode($result, true);
-        } catch( \Exception $e){
-            if(isset($info['http_code']))
-                $data['code']=$info['http_code'];
-            else
-                $data['code']=-1;
-            $data['message']=$e->getMessage();
-        }
-        curl_close($ch);
+            if (count($channels) == 0) break; // ... пока не кончатся необработанные строки
+
+            $active = null;
+            do {
+                $mrc = curl_multi_exec($multi, $active);
+            } while ($mrc == CURLM_CALL_MULTI_PERFORM);
+
+            while ($active && $mrc == CURLM_OK) {
+                if (curl_multi_select($multi) == -1) {
+                    continue;
+                }
+
+                do {
+                    $mrc = curl_multi_exec($multi, $active);
+                } while ($mrc == CURLM_CALL_MULTI_PERFORM);
+            }
+
+            foreach ($channels as $key => $channel) {
+                try {
+                    $info=curl_getinfo ($channel);
+                    $curldata[$key]['code']=$info['http_code'];
+                    $curldata[$key]['respond'] = json_decode(curl_multi_getcontent($channel), true);
+                } catch(\Exception $e){
+                    if(isset($info['http_code']))
+                        $curldata[$key]['code']=$info['http_code'];
+                    else
+                        $curldata[$key]['code']=-1;
+                    $curldata[$key]['message']=$e->getMessage();
+                }
+                 curl_multi_remove_handle($multi, $channel);
+                $callback('+1');
+            }
+
+            curl_multi_close($multi);
+        } while(true); // ну а чо?
+
     }
 
     /**
@@ -116,8 +133,6 @@ class doitall
 
         $curldata= $this->prepare_data($api);
 
-       // $callback('debug',$curldata);
-
         // устанавливаем верхнюю планку прогрессбара
         $callback('total',count($curldata));
 
@@ -127,7 +142,7 @@ class doitall
         foreach($curldata as $data){
             if($data['code']!='200' || !is_array($data['respond'])) {
                 // todo: какая то реакция на грязь в выводе нужна
-                $callback('bad respond',$data);
+                $callback('something wrong',$data);
                 continue;
             }
             foreach($data['respond'] as $key=>$val){
@@ -139,9 +154,9 @@ class doitall
                 $_data['value'] = $val['value'];
 
                 if (!$_ep) {
-                    DB::insert('insert into services set value=:value,type=:type, endpoint_id=:endpoint_id,  created_at=now(), updated_at=now()', $_data);
+                    DB::insert('insert into services set value=:value, type=:type, endpoint_id=:endpoint_id,  created_at=now(), updated_at=now()', $_data);
                 } else {
-                    DB::update('update services set value=:value,  updated_at=now() where type=:type and endpoint_id=:endpoint_id', $_data);
+                    DB::update('update services set value=:value, updated_at=now() where type=:type and endpoint_id=:endpoint_id', $_data);
                 }
             }
         }
