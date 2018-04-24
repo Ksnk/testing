@@ -62,17 +62,16 @@ class doitall
     /**
      * @param $curldata
      * @param $callback
-     * @todo: Подумать о переделке на динамическe. подставe обработанных реквестов... наверное проще побелить...
+     * @todo: Подумать о переделке на динамическую подставу обработанных реквестов... хотя, проще побелить...
      */
     private function multycurl (&$curldata,$callback){
         do { // эта музыка будет вечна...
 
-            $multi = curl_multi_init();
             $channels = [];
             $busy = [];
 
             foreach ($curldata as $key => $data) {
-                if (isset($busy[$data['type']]) || $data['code'] != 0) continue;
+                if (isset($busy[$data['api']]) || $data['code'] != 0) continue;
                 $ch = curl_init();
                 curl_setopt($ch, CURLOPT_URL, $data['url']);
                 if ($data['type'] == 'POST') { // so do POST
@@ -81,44 +80,44 @@ class doitall
                 }
                 curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
 
-                curl_multi_add_handle($multi, $ch);
                 $channels[$key] = $ch;
-                $busy[$data['type']] = true;
+                $busy[$data['api']] = true;
             }
             if (count($channels) == 0) break; // ... пока не кончатся необработанные строки
-
-            $active = null;
-            do {
-                $mrc = curl_multi_exec($multi, $active);
-            } while ($mrc == CURLM_CALL_MULTI_PERFORM);
-
-            while ($active && $mrc == CURLM_OK) {
-                if (curl_multi_select($multi) == -1) {
-                    continue;
+            if (count($channels) == 1) {
+                // perform simple curl
+                foreach ($channels as $key => $channel) {
+                    $result=curl_exec($ch);
+                    $info = curl_getinfo($channel);
+                    $curldata[$key]['code'] = $info['http_code'];
+                    $curldata[$key]['respond'] = json_decode($result, true);
+                    $callback('+1');
                 }
+            } else {
+                // perform multycurl
 
+                $multi = curl_multi_init();
+                foreach ($channels as $ch)
+                    curl_multi_add_handle($multi, $ch);
+                // perform multycurl
+                $active = 0;
+                // этот кусок хреново работает для всего одного хандла
                 do {
-                    $mrc = curl_multi_exec($multi, $active);
-                } while ($mrc == CURLM_CALL_MULTI_PERFORM);
-            }
+                    curl_multi_exec($multi, $active);
+                    curl_multi_select($multi);
+                } while ($active > 0);
 
-            foreach ($channels as $key => $channel) {
-                try {
-                    $info=curl_getinfo ($channel);
-                    $curldata[$key]['code']=$info['http_code'];
+                foreach ($channels as $key => $channel) {
+                    $info = curl_getinfo($channel);
+                    $curldata[$key]['code'] = $info['http_code'];
                     $curldata[$key]['respond'] = json_decode(curl_multi_getcontent($channel), true);
-                } catch(\Exception $e){
-                    if(isset($info['http_code']))
-                        $curldata[$key]['code']=$info['http_code'];
-                    else
-                        $curldata[$key]['code']=-1;
-                    $curldata[$key]['message']=$e->getMessage();
+                    curl_multi_remove_handle($multi, $channel);
+                    $callback('+1');
+                    //unset($busy[$curldata[$key]]);
                 }
-                 curl_multi_remove_handle($multi, $channel);
-                $callback('+1');
+                curl_multi_close($multi);
             }
 
-            curl_multi_close($multi);
         } while(true); // ну а чо?
 
     }
